@@ -95,22 +95,24 @@ module.exports = {
       css = `@import "tailwindcss/components"; @import "tailwindcss/utilities"; ${css}`
     }
 
-    return postcss([
-      postcssImport({path: path.dirname(userFilePath)}),
+    const toProcess = [
+      userFileExists && postcssImport({ path: path.dirname(userFilePath) }),
       postcssNested(),
       tailwindcss(config),
-      maizzleConfig.env === 'local' ? () => {} : mergeLonghand(),
-      ...get(maizzleConfig, 'build.postcss.plugins', [])
-    ])
-      .process(css, {from: undefined})
-      .then(result => result.css)
-      .catch(error => {
-        console.error(error)
+      maizzleConfig.env === "local" ? () => {} : mergeLonghand(),
+      ...get(maizzleConfig, "build.postcss.plugins", []),
+    ];
+
+    return postcss([...toProcess])
+      .process(css, { from: undefined })
+      .then((result) => result.css)
+      .catch((error) => {
+        console.error(error);
         if (spinner) {
-          spinner.stop()
+          spinner.stop();
         }
 
-        throw new Error(`Tailwind CSS compilation failed`)
-      })
+        throw new Error(`Tailwind CSS compilation failed`);
+      });
   }
 }
