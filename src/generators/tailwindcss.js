@@ -10,13 +10,16 @@ const {get, isObject, isEmpty, merge} = require('lodash')
 
 module.exports = {
   compile: async (css = '', html = '', tailwindConfig = {}, maizzleConfig = {}, spinner = null) => {
-    tailwindConfig = (isObject(tailwindConfig) && !isEmpty(tailwindConfig)) ? tailwindConfig : get(maizzleConfig, 'build.tailwind.config', 'tailwind.config.js')
+    tailwindConfig =
+      isObject(tailwindConfig) && !isEmpty(tailwindConfig)
+        ? tailwindConfig
+        : get(maizzleConfig, "build.tailwind.config", "tailwind.config.js");
 
     // Compute the Tailwind config to use
     const userConfig = () => {
       // If a custom config object was passed, use that
       if (isObject(tailwindConfig) && !isEmpty(tailwindConfig)) {
-        return tailwindConfig
+        return tailwindConfig;
       }
 
       /**
@@ -24,84 +27,93 @@ module.exports = {
        * This will use the default Tailwind config (with rem units etc)
        */
       try {
-        return requireUncached(path.resolve(process.cwd(), tailwindConfig))
+        return requireUncached(path.resolve(process.cwd(), tailwindConfig));
       } catch {
-        return {}
+        return {};
       }
-    }
+    };
 
     // Merge user's Tailwind config on top of a 'base' config
-    const config = merge({
-      important: true,
-      content: {
-        files: [
-          './src/**/*.*',
-          {raw: html, extension: 'html'}
-        ]
-      }
-    }, userConfig())
+    const config = merge(
+      {
+        important: true,
+        content: {
+          files: ["./src/**/*.*", { raw: html, extension: "html" }],
+        },
+      },
+      userConfig()
+    );
 
     // Add back the `{raw: html}` option if user provided own config
     if (Array.isArray(config.content)) {
       config.content = {
         files: [
           ...config.content,
-          './src/**/*.*',
-          {raw: html, extension: 'html'}
-        ]
-      }
+          "./src/**/*.*",
+          { raw: html, extension: "html" },
+        ],
+      };
     }
 
     // Include all `build.templates.source` paths when scanning for selectors to preserve
-    const buildTemplates = get(maizzleConfig, 'build.templates')
+    const buildTemplates = get(maizzleConfig, "build.templates");
 
     if (buildTemplates) {
-      const templateObjects = Array.isArray(buildTemplates) ? buildTemplates : [buildTemplates]
-      const templateSources = templateObjects.map(template => {
-        const source = get(template, 'source')
+      const templateObjects = Array.isArray(buildTemplates)
+        ? buildTemplates
+        : [buildTemplates];
+      const templateSources = templateObjects.map((template) => {
+        const source = get(template, "source");
 
-        if (typeof source === 'function') {
-          const sources = source(maizzleConfig)
+        if (typeof source === "function") {
+          const sources = source(maizzleConfig);
 
           if (Array.isArray(sources)) {
-            sources.map(s => config.content.files.push(s))
-          } else if (typeof sources === 'string') {
-            config.content.files.push(sources)
+            sources.map((s) => config.content.files.push(s));
+          } else if (typeof sources === "string") {
+            config.content.files.push(sources);
           }
 
           // Must return a valid `content` entry
-          return {raw: '', extension: 'html'}
+          return { raw: "", extension: "html" };
         }
 
         // Support single-file sources i.e. src/templates/index.html
-        if (typeof source === 'string' && Boolean(path.extname(source))) {
-          config.content.files.push(source)
+        if (typeof source === "string" && Boolean(path.extname(source))) {
+          config.content.files.push(source);
 
-          return {raw: '', extension: 'html'}
+          return { raw: "", extension: "html" };
         }
 
-        return `${source}/**/*.*`
-      })
+        return `${source}/**/*.*`;
+      });
 
-      config.content.files.push(...templateSources)
+      config.content.files.push(...templateSources);
     }
 
-    const userFilePath = get(maizzleConfig, 'build.tailwind.css', path.join(process.cwd(), 'src/css/tailwind.css'))
-    const userFileExists = await fs.pathExists(userFilePath)
-
-    if (userFileExists) {
-      css = await fs.readFile(path.resolve(userFilePath), 'utf8') + css
-    } else {
-      css = `@import "tailwindcss/components"; @import "tailwindcss/utilities"; ${css}`
-    }
-
-    const toProcess = [
-      userFileExists && postcssImport({ path: path.dirname(userFilePath) }),
+    let toProcess = [
       postcssNested(),
       tailwindcss(config),
       maizzleConfig.env === "local" ? () => {} : mergeLonghand(),
       ...get(maizzleConfig, "build.postcss.plugins", []),
     ];
+
+    const userFilePath = get(
+      maizzleConfig,
+      "build.tailwind.css",
+      path.join(process.cwd(), "src/css/tailwind.css")
+    );
+    const userFileExists = await fs.pathExists(userFilePath);
+
+    if (userFileExists) {
+      css = (await fs.readFile(path.resolve(userFilePath), "utf8")) + css;
+      toProcess = [
+        postcssImport({ path: path.dirname(userFilePath) }),
+        ...toProcess,
+      ];
+    } else {
+      css = `@import "tailwindcss/components"; @import "tailwindcss/utilities"; ${css}`;
+    }
 
     return postcss([...toProcess])
       .process(css, { from: undefined })
